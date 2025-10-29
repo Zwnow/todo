@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>٩(- ̮̮̃-̃)۶ Todo-List</title>
+    <link href="https://cdn.jsdelivr.net/npm/daisyui@5" rel="stylesheet" type="text/css" />
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4" defer></script>
+</head>
+<body class="inset-0 bg-gray-200 flex flex-col justify-center items-center h-screen w-full p-8">
+    <main class="flex flex-col h-full w-full max-w-3xl justify-start items-center bg-white rounded-lg shadow-lg p-8">
+        <div class="flex flex-col-reverse md:flex-row w-full gap-2 p-4 items-center justify-center">
+            <button class="btn" onclick="create_todo.showModal()">Create Task</button>
+            <fieldset class="flex flex-row w-full justify-between md:justify-center gap-4">
+                <label for="completed_filter">Completed</label>
+                <input id="completed_filter" type="checkbox" class="checkbox" checked />
+            </fieldset>
+            <fieldset class="flex flex-row w-full justify-between md:justify-center gap-4">
+                <label for="todo_filter">Todo</label>
+                <input id="todo_filter" type="checkbox" class="checkbox" checked />
+            </fieldset>
+
+            <input id="search" type="text" placeholder="Search..." class="input text-sm w-full md:max-w-[400px]" />
+        </div>
+
+        <div id="task_container" class="flex h-full w-full items-center p-4 overflow-y-scroll flex-col gap-1">
+
+        </div>
+
+        <dialog id="create_todo" class="modal">
+            <div class="modal-box">
+                <h3 class="text-lg font-bold mb-4">Create Task</h3>
+                <fieldset class="flex flex-col gap-1">
+                    <input id="task_name_input" class="input w-full" />
+                </fieldset>
+                <div class="modal-action">
+                    <form method="dialog">
+                        <button class="btn btn-ghost">Close</button>
+                        <button type="button" class="btn" onclick="createTask(event)">Save</button>
+                    </form>
+                </div>
+            </div>
+        </dialog>
+
+        <dialog id="generate_todo_warning" class="modal">
+            <div class="modal-box">
+                <h3 class="text-lg font-bold">Warning</h3>
+                <p>This will delete all currently created tasks and generate 10 new tasks.</p>
+                <p>Do you want to continue?</p>
+                <div class="modal-action">
+                    <form method="dialog">
+                        <button class="btn">Close</button>
+                        <button type="button" class="btn btn-secondary" onclick="generateTasks(event)">Yes</button>
+                    </form>
+                </div>
+            </div>
+        </dialog>
+
+        <p class="text-sm">Testing controls</p>
+        <div class="flex flex-row gap-2">
+            <button type="button" class="btn btn-xs" onclick="generate_todo_warning.showModal()">Generate Tasks</button>
+            <button type="button" class="btn btn-xs" onclick="resetState()">Reset State</button>
+        </div>
+    </main>
+</body>
+
+<script>
+let state = {
+    counter: 0,
+    searchterm: '',
+    currentView: 0,
+    completedFilter: true,
+    todoFilter: true,
+    deletedTasks: [],
+    tasks: []
+}
+
+const onMounted = async () => {
+    const _state = localStorage.getItem('state');
+    if (_state) {
+        state = JSON.parse(_state);
+    }
+
+    document.getElementById('todo_filter').addEventListener('input', (e) => {
+        state.todoFilter = e.target.checked;
+        persistState();
+        rerender();
+    });
+    document.getElementById('completed_filter').addEventListener('input', (e) => {
+        state.completedFilter = e.target.checked;
+        persistState();
+        rerender();
+    });
+    document.getElementById('search').addEventListener('input', (e) => {
+        state.searchterm = e.target.value;
+        persistState();
+        rerender([], term);
+    });
+
+    rerender();
+}
+
+const createTask = (e) => {
+    const length = document.getElementById('task_name_input').value.length;
+    if (length > 50) {
+        window.alert("Please describe the task in less than 50 characters.");
+        return;
+    }
+    
+    state.counter += 1;
+    state.tasks.push({ 
+        id: state.counter,
+        task: document.getElementById('task_name_input').value,
+        complete: false,
+        deleted: false,
+    });
+
+    persistState();
+    document.getElementById('task_name_input').value = '';
+    create_todo.close();
+    rerender();
+}
+
+const editTask = (id) => {
+
+}
+
+const completeTask = (id) => {
+    state.tasks.forEach((task) => {
+        if (task.id === id) {
+            task.complete = !task.complete;
+        }
+    });
+    persistState();
+    rerender();
+}
+
+const deleteTask = (id) => {
+    const task = state.tasks.find((t) => t.id === id);
+    task.deleted = true;
+    state.deletedTasks.push(task);
+    state.tasks = state.tasks.filter((t) => t.id !== id);
+    persistState();
+    rerender();
+}
+
+const persistState = (e) => {
+    localStorage.setItem('state', JSON.stringify(state));
+}
+
+const rerender = (tasks = [], term = '') => {
+    const container = document.getElementById('task_container');
+    container.innerHTML = "";
+
+    // Render all non deleted tasks
+    let tasksToRender = [];
+    if (state.currentView === 0) {
+        tasksToRender = state.tasks.filter((t) => t.deleted === false);
+        if (term.length > 0) {
+            tasksToRender = fuzzySearch(term, tasksToRender)
+        }
+        if (!state.completedFilter) {
+            tasksToRender = tasksToRender.filter((t) => t.complete === false);
+        }
+        if (!state.todoFilter) {
+            tasksToRender = tasksToRender.filter((t) => t.complete === true);
+        }
+    } else {
+        tasksToRender = state.tasks.filter((t) => t.deleted === true);
+    }
+
+    tasksToRender.sort((a, b) => {
+        if (a.id < b.id) return 1
+        return -1
+    })
+
+    if (state.currentView === 0) {
+        for (let i = 0; i < tasksToRender.length; i++) {
+            if (tasksToRender[i].complete === false) {
+                container.innerHTML += `
+                    <fieldset class="flex flex-col sm:flex-row w-full justify-between gap-2">
+                        <p class="min-w-[100px]">${tasksToRender[i].id}</p>
+                        <div class="flex flex-1 justify-start max-w-[200px]">
+                            <p class="label text-black text-wrap">${tasksToRender[i].task}</p>
+                        </div>
+                        <div class="flex flex-row gap-2">
+                            <button class="btn btn-xs" onclick="editTask(${tasksToRender[i].id})">Edit</button>
+                            <button class="btn btn-xs" onclick="completeTask(${tasksToRender[i].id})">Complete</button>
+                            <button class="btn btn-xs bg-red-700 text-white" onclick="deleteTask(${tasksToRender[i].id})">Delete</button>
+                        </div>
+                    </fieldset>
+                `
+            } else {
+                container.innerHTML += `
+                    <fieldset class="flex flex-col sm:flex-row w-full justify-between gap-2">
+                        <p class="min-w-[100px]">${tasksToRender[i].id}</p>
+                        <div class="flex flex-1 justify-start max-w-[200px]">
+                            <p class="label text-wrap"><s>${tasksToRender[i].task}</s></p>
+                        </div>
+                        <div class="flex flex-row gap-2">
+                            <button class="btn btn-xs" onclick="editTask(${tasksToRender[i].id})">Edit</button>
+                            <button class="btn btn-xs" onclick="completeTask(${tasksToRender[i].id})">Uncomplete</button>
+                            <button class="btn btn-xs bg-red-700 text-white" onclick="deleteTask(${tasksToRender[i].id})">Delete</button>
+                        </div>
+                    </fieldset>
+                `
+            }
+        }
+    }
+}
+
+const fuzzySearch = (query, items) => {
+  if (!query) return items;
+  const pattern = query
+    .split('')
+    .map(char => char.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&'))
+    .join('.*?');
+
+  const regex = new RegExp(pattern, 'i');
+
+  return items.filter(item => regex.test(item.task));
+}
+
+const generateTasks = (e) => {
+    state.tasks = [
+        {id: 10, task: "Get out of bed aaaaa aaaaaaaaaa aaaa aaaaaaaaa aaaa", complete: false, deleted: false},
+        {id: 9, task: "Brush teeth", complete: false, deleted: false},
+        {id: 8, task: "Grab a coffee", complete: false, deleted: false},
+        {id: 7, task: "Clean up kitchen", complete: false, deleted: false},
+        {id: 6, task: "Get to work", complete: false, deleted: false},
+        {id: 5, task: "Come back from work", complete: false, deleted: false},
+        {id: 4, task: "Cuddle pet", complete: false, deleted: false},
+        {id: 3, task: "Mow the lawn", complete: false, deleted: false},
+        {id: 2, task: "Talk to neighbor", complete: false, deleted: false},
+        {id: 1, task: "Get to bed", complete: false, deleted: false},
+    ];
+
+    generate_todo_warning.close();
+    persistState();
+    rerender();
+}
+
+const resetState = () => {
+    localStorage.removeItem('state');
+    state = {
+        counter: 0,
+        currentView: 0,
+        completedFilter: true,
+        todoFilter: true,
+        deletedTasks: [],
+        tasks: []
+    };
+    rerender();
+}
+
+(async () => { 
+    await onMounted();
+})();
+</script>
+</html>
