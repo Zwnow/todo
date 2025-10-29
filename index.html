@@ -10,7 +10,10 @@
 <body class="inset-0 bg-gray-200 flex flex-col justify-center items-center h-screen w-full p-8">
     <main class="flex flex-col h-full w-full max-w-3xl justify-start items-center bg-white rounded-lg shadow-lg p-8">
         <div class="flex flex-col-reverse md:flex-row w-full gap-2 p-4 items-center justify-center">
-            <button class="btn" onclick="create_todo.showModal()">Create Task</button>
+            <div class="flex flex-col gap-2">
+                <button class="btn" onclick="create_todo.showModal()">Create Task</button>
+
+            </div>
             <fieldset class="flex flex-row w-full justify-between md:justify-center gap-4">
                 <label for="completed_filter">Completed</label>
                 <input id="completed_filter" type="checkbox" class="checkbox" checked />
@@ -25,6 +28,10 @@
 
         <div id="task_container" class="flex h-full w-full items-center p-4 overflow-y-scroll flex-col gap-1">
 
+        </div>
+        <div class="flex flex-row gap-2 pb-8">
+            <button class="btn btn-sm" onclick="showTasks()">Show Active</button>
+            <button class="btn btn-sm" onclick="showDeleted()">Show Deleted</button>
         </div>
 
         <dialog id="create_todo" class="modal">
@@ -42,6 +49,21 @@
             </div>
         </dialog>
 
+        <dialog id="edit_todo" class="modal">
+            <div class="modal-box">
+                <h3 class="text-lg font-bold mb-4">Edit Task</h3>
+                <fieldset class="flex flex-col gap-1">
+                    <input id="edit_task_name_input" class="input w-full" />
+                </fieldset>
+                <div class="modal-action">
+                    <form method="dialog">
+                        <button class="btn btn-ghost">Close</button>
+                        <button type="button" class="btn" onclick="editTask(event)">Save</button>
+                    </form>
+                </div>
+            </div>
+        </dialog>
+
         <dialog id="generate_todo_warning" class="modal">
             <div class="modal-box">
                 <h3 class="text-lg font-bold">Warning</h3>
@@ -49,8 +71,8 @@
                 <p>Do you want to continue?</p>
                 <div class="modal-action">
                     <form method="dialog">
-                        <button class="btn">Close</button>
-                        <button type="button" class="btn btn-secondary" onclick="generateTasks(event)">Yes</button>
+                        <button class="btn btn-ghost">Close</button>
+                        <button type="button" class="btn" onclick="generateTasks(event)">Yes</button>
                     </form>
                 </div>
             </div>
@@ -94,8 +116,12 @@ const onMounted = async () => {
     document.getElementById('search').addEventListener('input', (e) => {
         state.searchterm = e.target.value;
         persistState();
-        rerender([], term);
+        rerender();
     });
+
+    if (state.searchterm.length > 0) {
+        document.getElementById('search').value = state.searchterm;
+    }
 
     rerender();
 }
@@ -121,8 +147,29 @@ const createTask = (e) => {
     rerender();
 }
 
-const editTask = (id) => {
+const openEditTask = (id) => {
+    localStorage.setItem('editing', id);
+    const task = state.tasks.find((t) => t.id === id);
+    const input = document.getElementById('edit_task_name_input');
+    input.value = task.task;
 
+    edit_todo.showModal();
+}
+
+const editTask = async () => {
+    const id = await localStorage.getItem('editing');
+    const idx = state.tasks.findIndex((t) => t.id == id);
+    const value = document.getElementById('edit_task_name_input').value;
+    if (value.length > 50) {
+        window.alert("Please describe the task in less than 50 characters.");
+        return;
+    }
+
+    state.tasks[idx].task = value;
+    persistState();
+    rerender();
+
+    edit_todo.close();
 }
 
 const completeTask = (id) => {
@@ -144,11 +191,39 @@ const deleteTask = (id) => {
     rerender();
 }
 
+const showTasks = () => {
+    state.currentView = 0;
+    persistState();
+    rerender();
+}
+
+const showDeleted = () => {
+    state.currentView = 1;
+    persistState();
+    rerender();
+}
+
+const undeleteTask = (id) => {
+    const task = state.deletedTasks.find((t) => t.id === id);
+    state.counter += 1;
+    const newTask = {
+        id: state.counter,
+        deleted: false,
+        task: task.task,
+        complete: task.complete
+    }
+
+    state.deletedTasks = state.deletedTasks.filter((t) => t.id !== id);
+    state.tasks.push(newTask);
+    persistState();
+    rerender();
+}
+
 const persistState = (e) => {
     localStorage.setItem('state', JSON.stringify(state));
 }
 
-const rerender = (tasks = [], term = '') => {
+const rerender = (tasks = []) => {
     const container = document.getElementById('task_container');
     container.innerHTML = "";
 
@@ -156,17 +231,18 @@ const rerender = (tasks = [], term = '') => {
     let tasksToRender = [];
     if (state.currentView === 0) {
         tasksToRender = state.tasks.filter((t) => t.deleted === false);
-        if (term.length > 0) {
-            tasksToRender = fuzzySearch(term, tasksToRender)
-        }
-        if (!state.completedFilter) {
-            tasksToRender = tasksToRender.filter((t) => t.complete === false);
-        }
-        if (!state.todoFilter) {
-            tasksToRender = tasksToRender.filter((t) => t.complete === true);
-        }
     } else {
-        tasksToRender = state.tasks.filter((t) => t.deleted === true);
+        tasksToRender = state.deletedTasks;
+    }
+
+    if (state.searchterm.length > 0) {
+        tasksToRender = fuzzySearch(state.searchterm, tasksToRender)
+    }
+    if (!state.completedFilter) {
+        tasksToRender = tasksToRender.filter((t) => t.complete === false);
+    }
+    if (!state.todoFilter) {
+        tasksToRender = tasksToRender.filter((t) => t.complete === true);
     }
 
     tasksToRender.sort((a, b) => {
@@ -184,7 +260,7 @@ const rerender = (tasks = [], term = '') => {
                             <p class="label text-black text-wrap">${tasksToRender[i].task}</p>
                         </div>
                         <div class="flex flex-row gap-2">
-                            <button class="btn btn-xs" onclick="editTask(${tasksToRender[i].id})">Edit</button>
+                            <button class="btn btn-xs" onclick="openEditTask(${tasksToRender[i].id})">Edit</button>
                             <button class="btn btn-xs" onclick="completeTask(${tasksToRender[i].id})">Complete</button>
                             <button class="btn btn-xs bg-red-700 text-white" onclick="deleteTask(${tasksToRender[i].id})">Delete</button>
                         </div>
@@ -198,13 +274,27 @@ const rerender = (tasks = [], term = '') => {
                             <p class="label text-wrap"><s>${tasksToRender[i].task}</s></p>
                         </div>
                         <div class="flex flex-row gap-2">
-                            <button class="btn btn-xs" onclick="editTask(${tasksToRender[i].id})">Edit</button>
+                            <button class="btn btn-xs" onclick="openEditTask(${tasksToRender[i].id})">Edit</button>
                             <button class="btn btn-xs" onclick="completeTask(${tasksToRender[i].id})">Uncomplete</button>
                             <button class="btn btn-xs bg-red-700 text-white" onclick="deleteTask(${tasksToRender[i].id})">Delete</button>
                         </div>
                     </fieldset>
                 `
             }
+        }
+    } else {
+        for (let i = 0; i < tasksToRender.length; i++) {
+            container.innerHTML += `
+            <fieldset class="flex flex-col sm:flex-row w-full justify-between gap-2">
+                <p class="min-w-[100px]">${tasksToRender[i].id}</p>
+                <div class="flex flex-1 justify-start max-w-[200px]">
+                    <p class="label text-black text-wrap">${tasksToRender[i].task}</p>
+                </div>
+                <div class="flex flex-row gap-2">
+                    <button class="btn btn-xs" onclick="undeleteTask(${tasksToRender[i].id})">Recover</button>
+                </div>
+            </fieldset>
+            `
         }
     }
 }
@@ -234,6 +324,7 @@ const generateTasks = (e) => {
         {id: 2, task: "Talk to neighbor", complete: false, deleted: false},
         {id: 1, task: "Get to bed", complete: false, deleted: false},
     ];
+    state.counter = 10;
 
     generate_todo_warning.close();
     persistState();
@@ -246,6 +337,7 @@ const resetState = () => {
         counter: 0,
         currentView: 0,
         completedFilter: true,
+        searchterm: '',
         todoFilter: true,
         deletedTasks: [],
         tasks: []
