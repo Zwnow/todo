@@ -84,7 +84,6 @@
             <button type="button" class="btn btn-xs" onclick="resetState()">Reset State</button>
         </div>
     </main>
-</body>
 
 <script>
 let state = {
@@ -122,6 +121,9 @@ const onMounted = async () => {
     if (state.searchterm.length > 0) {
         document.getElementById('search').value = state.searchterm;
     }
+
+    document.getElementById('completed_filter').checked = state.completedFilter;
+    document.getElementById('todo_filter').checked = state.todoFilter;
 
     rerender();
 }
@@ -349,4 +351,5 @@ const resetState = () => {
     await onMounted();
 })();
 </script>
+</body>
 </html>
